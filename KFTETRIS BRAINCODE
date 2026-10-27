@@ -16,6 +16,8 @@ const ROWS = 20;
 
 const COLS = 10;
 
+const CELL_SIZE = 30;
+
 const PIECES = [
   [[1,1,1,1]], //straight
   [[2,2],[2,2]],//box
@@ -25,6 +27,15 @@ const PIECES = [
   [[6,6,0],[0,6,6]],//S shaped
   [[0,7,7],[7,7,0]],//z shaped
 ];
+
+const MOVES = {
+  left:   () => [currentPiece, pieceRow, pieceCol - 1],
+  right:  () => [currentPiece, pieceRow, pieceCol + 1],
+  down:   () => [currentPiece, pieceRow + 1, pieceCol],
+  rotate: () => [rotatePiece(currentPiece), pieceRow, pieceCol]
+};
+
+const props = PropertiesService.getScriptProperties();
 
 let board = [];
 
@@ -42,56 +53,31 @@ let finished = false;
 
 function startGame() {
   
+  finished = false;
+  score = 0;
+
   initializeBoard();
   resetValues();
   showSidebar();
   spawnPiece();
 
-  
-  finished = false;
-  let startTime = 0;
-  let passedTime = 0;
-
-  do {
-    
-    let restart = PropertiesService.getScriptProperties().getProperty('restart') == 'true';
-    if (restart) {
-      finished = true;
-      score = 0;
-    }
-
-   
-    startTime = new Date();
+  while (!finished && props.getProperty('restart') !== 'true'){
+    const start = Date.now();
     gameTick();
-    passedTime = new Date() - startTime;
-    if (INTERVAL - passedTime > 0) {
-      waiting(INTERVAL - passedTime);
-    }
-  } while (!finished);
+    const remaining = INTERVAL-(Date.now()-start);
+    if(remaining>0)waiting(remaining);
+  }
+
 }
 
 function initializeBoard() {
   
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
  
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
- 
-  const range = sheet.getRange(1, 1, ROWS, COLS);
-
-  range.setBackground(BG_COLOR);
-
-  range.clearContent();
-
- 
-  const cellSize = 30;
-
-  for (let i = 1; i <= COLS; i++) {
-    sheet.setColumnWidth(i, cellSize);
-  }
-
-  for (let j = 1; j <= ROWS; j++) {
-    sheet.setRowHeight(j, cellSize);
-  }
+  const sheet = SpreadsheetApp.getActiveSheet();
+  sheet.getRange(1,1,ROWS,COLS).setBackground(BG_COLOR).clearContent();
+  sheet.setColumnWidths(1,COLS,CELL_SIZE);
+  sheet.setRowHeights(1,ROWS,CELL_SIZE);
 }
 
 
@@ -115,46 +101,12 @@ function spawnPiece() {
 
 function drawPiece(piece, row, col) {
   
-  const updates = [];
-  
-  piece.forEach((r, i) => {
-  
-    r.forEach((cell, j) => {
-  
-      if (cell) {
-  
-        updates.push({ row: row + i + 1, col: col + j + 1, color: COLORS[currentPieceIndex] });
-      }
-    });
-  });
-  batchUpdateCells(updates);
+  paintPiece(piece, row, col, COLORS[currentPieceIndex + 1]);
 }
 
 function clearPiece(piece, row, col) {
   
-  const updates = [];
-  
-  piece.forEach((r, i) => {
-  
-    r.forEach((cell, j) => {
-  
-      if (cell) {
-  
-        updates.push({ row: row + i + 1, col: col + j + 1, color: BG_COLOR });
-      }
-    });
-  });
-  batchUpdateCells(updates);
-}
-
-function batchUpdateCells(updates) {
-  
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  
-  updates.forEach(update => {
-  
-    sheet.getRange(update.row, update.col).setBackground(update.color);
-  });
+  paintPiece(piece, row, col, BG_COLOR);
 }
 
 function isValidMove(piece, row, col) {
@@ -165,39 +117,25 @@ function isValidMove(piece, row, col) {
   
     const y = col + j;
   
-    return (
-  
-      cell === 0 ||
-      (x >= 0 && x < ROWS && y >= 0 && y < COLS && board[x][y] === 0)
-    );
+    return cell === 0 ||(x >= 0 && x < ROWS && y >= 0 && y < COLS && board[x][y] === 0);
   }));
 }
 
 function gameTick() {
   
-  let moveQueue = JSON.parse(PropertiesService.getScriptProperties().
-  getProperty('moveQueue') || '[]');
-  
-  PropertiesService.getScriptProperties().setProperty('moveQueue', JSON.stringify([]));
+  const queue = JSON.parse(props.getProperty('moveQueue')||'[]');
+  props.setProperty('moveQueue','[]');
 
   clearPiece(currentPiece, pieceRow, pieceCol);
 
-  moveQueue.forEach(move => {
+  queue.forEach(move => {
+    
+    const [piece,row,col] = MOVES[move]?.()??[];
   
-    if (move === 'left' && isValidMove(currentPiece, pieceRow, pieceCol - 1)) {
-      pieceCol--;
-    
-    } else if (move === 'right' && isValidMove(currentPiece, pieceRow, pieceCol + 1)) {
-      pieceCol++;
-    
-    } else if (move === 'down' && isValidMove(currentPiece, pieceRow + 1, pieceCol)) {
-      pieceRow++;
-    
-    } else if (move === 'rotate') {
-      const rotated = rotatePiece(currentPiece);
-      if (isValidMove(rotated, pieceRow, pieceCol)) {
-        currentPiece = rotated;
-      }
+    if (piece && isValidMove(piece,row,col)){
+      currentPiece=piece;
+      pieceRow=row;
+      pieceCol=col;
     }
   });
 
@@ -214,21 +152,16 @@ function gameTick() {
 }
 
 function lockPiece() {
-  
-  currentPiece.forEach((r, i) => {
-  
-    r.forEach((cell, j) => {
-  
-      if (cell) {
-        board[pieceRow + i][pieceCol + j] = currentPieceIndex + 1;
-      }
-    });
-  });
+
+  currentPiece.forEach((r,i)=>r.forEach((cell,j)=>{
+    
+    if(cell)board[pieceRow+i][pieceCol+j]=currentPieceIndex+1;
+  }));
 }
 
 function clearLines() {
   
-  let prevScore = score;
+  let cleared = 0;
   
   for (let r = ROWS - 1; r >= 0; r--) {
   
@@ -237,42 +170,34 @@ function clearLines() {
       board.splice(r, 1);
       board.unshift(Array(COLS).fill(0));
       r++;
-
-      score += 100;
+      cleared++;
     }
   }
 
-  if (prevScore < score) {
-    PropertiesService.getScriptProperties().setProperty('score', score);
+  if (cleared>0) {
+    score+=cleared*100;
+    props.setProperty('score',String(score)); 
   }
 }
 
 function drawBoard() {
-
-  const updates = [];
-
-  for (let r = 0; r < ROWS; r++) {
-
-    for (let c = 0; c < COLS; c++) {
-
-      const color = board[r][c] > 0 ? COLORS[board[r][c] - 1] : BG_COLOR;
-      updates.push({ row: r + 1, col: c + 1, color });
-    }
-  }
-  batchUpdateCells(updates);
+  
+  const colors = board.map(row=>row.map(v=>(v>0? COLORS[v]:BG_COLOR)));
+  
+  SpreadsheetApp.getActiveSheet().getRange(1,1,ROWS,COLS).setBackgrounds(colors);
 }
 
 function handleMove(direction) {
 
-  let moveQueue = JSON.parse(PropertiesService.getScriptProperties().getProperty('moveQueue') || '[]');
-  moveQueue.push(direction);
+  const queue = JSON.parse(props.getProperty('moveQueue') || '[]');
+  queue.push(direction);
   
-  PropertiesService.getScriptProperties().setProperty('moveQueue', JSON.stringify(moveQueue));
+  props.setProperty('moveQueue', JSON.stringify(queue));
 }
 
 function rotatePiece(piece) {
   
-  return piece[0].map((val, index) => piece.map(row => row[index]).reverse());
+  return piece[0].map((_, index) => piece.map(row => row[index]).reverse());
 }
 
 function onOpen() {
@@ -284,21 +209,21 @@ function onOpen() {
 
 function resetValues() {
   
-  PropertiesService.getScriptProperties().setProperty('score', score);
-  
-  PropertiesService.getScriptProperties().setProperty('moveQueue', JSON.stringify([]));
-  
-  PropertiesService.getScriptProperties().setProperty('restart', false);
+  props.setProperties({
+    score: String(score),
+    moveQueue:'[]',
+    restart:'false'
+  });
 }
 
 function getScore() {
   
-  return parseInt(PropertiesService.getScriptProperties().getProperty('score'));
+  return parseInt(props.getProperty('score'),10);
 }
 
 function restartGame() {
   
-  PropertiesService.getScriptProperties().setProperty('restart', true);
+  props.setProperty('restart', 'true');
   waiting(2000);
   
   startGame();
@@ -313,11 +238,18 @@ function showSidebar() {
   SpreadsheetApp.getUi().showSidebar(html);
 }
 
+function paintPiece(piece,row,col,color){
+  
+  const sheet = SpreadsheetApp.getActiveSheet();
+  
+  piece.forEach((r,i)=>r.forEach((cell,j)=>{
+    if (cell)sheet.getRange(row+i+1,col+j+1).setBackground(color);
+  }));
+}
+
 function waiting(msec) {
  
   SpreadsheetApp.flush();
  
   Utilities.sleep(msec);
- 
-  SpreadsheetApp.flush();
 }
