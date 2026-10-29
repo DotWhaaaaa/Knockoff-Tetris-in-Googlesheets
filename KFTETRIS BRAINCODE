@@ -7,17 +7,27 @@ const COLORS = {
   6:'#EC4899',
   7:'#14B8A6'
 };
-
-const BG_COLOR = '#EEEEEE';
-
+ 
+const BG_PALLETTE= [
+  '#FF5F00','#7B2CFF','#4deeea','#001eff','#f000ff','#ffe700','#74ee15','#39FF14','#FE019A'
+];
+ 
+let BGINDEX = 0;
+ 
+let BG_COLOR = BG_PALLETTE[0];
+ 
 const INTERVAL = 500;
-
+ 
+const TICK = 100;
+ 
+const BG_INTERVAL = 2000;
+ 
 const ROWS = 20;
-
+ 
 const COLS = 10;
-
+ 
 const CELL_SIZE = 30;
-
+ 
 const PIECES = [
   [[1,1,1,1]], //straight
   [[2,2],[2,2]],//box
@@ -27,49 +37,56 @@ const PIECES = [
   [[6,6,0],[0,6,6]],//S shaped
   [[0,7,7],[7,7,0]],//z shaped
 ];
-
+ 
 const MOVES = {
   left:   () => [currentPiece, pieceRow, pieceCol - 1],
   right:  () => [currentPiece, pieceRow, pieceCol + 1],
   down:   () => [currentPiece, pieceRow + 1, pieceCol],
   rotate: () => [rotatePiece(currentPiece), pieceRow, pieceCol]
 };
-
+ 
 const props = PropertiesService.getScriptProperties();
-
+ 
 let board = [];
-
+ 
 let currentPiece = null;
-
+ 
 let currentPieceIndex = 0;
-
+ 
 let pieceRow = 0;
-
+ 
 let pieceCol = 0;
-
+ 
 let score = 0;
-
+ 
 let finished = false;
-
-function startGame() {
+ 
+let lastDrop = 0;
+ 
+let lastBg = 0;
+ 
+function startGame(openSidebar) {
   
   finished = false;
   score = 0;
-
+ 
   initializeBoard();
   resetValues();
-  showSidebar();
+  if (openSidebar !== false) showSidebar();
   spawnPiece();
-
+ 
+  lastDrop = Date.now();
+  lastBg = Date.now();
+ 
   while (!finished && props.getProperty('restart') !== 'true'){
     const start = Date.now();
     gameTick();
-    const remaining = INTERVAL-(Date.now()-start);
+    const remaining = TICK-(Date.now()-start);
     if(remaining>0)waiting(remaining);
   }
-
+ 
 }
-
+ 
 function initializeBoard() {
   
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
@@ -79,8 +96,8 @@ function initializeBoard() {
   sheet.setColumnWidths(1,COLS,CELL_SIZE);
   sheet.setRowHeights(1,ROWS,CELL_SIZE);
 }
-
-
+ 
+ 
 function spawnPiece() {
   currentPieceIndex = Math.floor(Math.random() * PIECES.length);
   
@@ -98,17 +115,17 @@ function spawnPiece() {
   }
   drawPiece(currentPiece, pieceRow, pieceCol);
 }
-
+ 
 function drawPiece(piece, row, col) {
   
   paintPiece(piece, row, col, COLORS[currentPieceIndex + 1]);
 }
-
+ 
 function clearPiece(piece, row, col) {
   
   paintPiece(piece, row, col, BG_COLOR);
 }
-
+ 
 function isValidMove(piece, row, col) {
   
   return piece.every((r, i) => r.every((cell, j) => {
@@ -120,14 +137,39 @@ function isValidMove(piece, row, col) {
     return cell === 0 ||(x >= 0 && x < ROWS && y >= 0 && y < COLS && board[x][y] === 0);
   }));
 }
-
+ 
+function takeMoves() {
+ 
+  const lock = LockService.getScriptLock();
+  lock.waitLock(1000);
+ 
+  try {
+    const queue = JSON.parse(props.getProperty('moveQueue')||'[]');
+    if (queue.length) props.setProperty('moveQueue','[]');
+    return queue;
+  } finally {
+    lock.releaseLock();
+  }
+}
+ 
 function gameTick() {
-  
-  const queue = JSON.parse(props.getProperty('moveQueue')||'[]');
-  props.setProperty('moveQueue','[]');
-
+ 
+  const queue = takeMoves();
+  const dropDue = Date.now()-lastDrop>=INTERVAL;
+  const bgDue = Date.now()-lastBg>=BG_INTERVAL;
+ 
+  if (!queue.length && !dropDue && !bgDue) return;
+ 
+  if (bgDue) {
+    lastBg = Date.now();
+    BGINDEX = (BGINDEX+1)% BG_PALLETTE.length;
+    BG_COLOR = BG_PALLETTE[BGINDEX];
+ 
+    drawBoard();
+  }
+ 
   clearPiece(currentPiece, pieceRow, pieceCol);
-
+ 
   queue.forEach(move => {
     
     const [piece,row,col] = MOVES[move]?.()??[];
@@ -138,27 +180,34 @@ function gameTick() {
       pieceCol=col;
     }
   });
-
-  if (isValidMove(currentPiece, pieceRow + 1, pieceCol)) {
-    pieceRow++;
-    drawPiece(currentPiece, pieceRow, pieceCol);
+ 
+  if (dropDue) {
+    lastDrop = Date.now();
+ 
+    if (isValidMove(currentPiece, pieceRow + 1, pieceCol)) {
+      pieceRow++;
   
-  } else {
-    lockPiece();
-    clearLines();
-    drawBoard();
-    spawnPiece();
+    } else {
+      lockPiece();
+      clearLines();
+      drawBoard();
+      spawnPiece();
+      return;
+    }
   }
+ 
+  drawPiece(currentPiece, pieceRow, pieceCol);
+ 
 }
-
+ 
 function lockPiece() {
-
+ 
   currentPiece.forEach((r,i)=>r.forEach((cell,j)=>{
     
     if(cell)board[pieceRow+i][pieceCol+j]=currentPieceIndex+1;
   }));
 }
-
+ 
 function clearLines() {
   
   let cleared = 0;
@@ -173,40 +222,47 @@ function clearLines() {
       cleared++;
     }
   }
-
+ 
   if (cleared>0) {
     score+=cleared*100;
     props.setProperty('score',String(score)); 
   }
 }
-
+ 
 function drawBoard() {
   
   const colors = board.map(row=>row.map(v=>(v>0? COLORS[v]:BG_COLOR)));
   
   SpreadsheetApp.getActiveSheet().getRange(1,1,ROWS,COLS).setBackgrounds(colors);
 }
-
+ 
 function handleMove(direction) {
-
-  const queue = JSON.parse(props.getProperty('moveQueue') || '[]');
-  queue.push(direction);
+ 
+  const lock = LockService.getScriptLock();
+  lock.waitLock(1000);
+ 
+  try {
+    const queue = JSON.parse(props.getProperty('moveQueue') || '[]');
+    queue.push(direction);
   
-  props.setProperty('moveQueue', JSON.stringify(queue));
+    props.setProperty('moveQueue', JSON.stringify(queue));
+  } finally {
+    lock.releaseLock();
+  }
 }
-
+ 
 function rotatePiece(piece) {
   
   return piece[0].map((_, index) => piece.map(row => row[index]).reverse());
 }
-
+ 
 function onOpen() {
   
   SpreadsheetApp.getUi().createMenu('Tetris')
     .addItem('Start Game', 'startGame')
     .addToUi();
 }
-
+ 
 function resetValues() {
   
   props.setProperties({
@@ -215,20 +271,20 @@ function resetValues() {
     restart:'false'
   });
 }
-
+ 
 function getScore() {
   
   return parseInt(props.getProperty('score'),10);
 }
-
+ 
 function restartGame() {
   
   props.setProperty('restart', 'true');
   waiting(2000);
   
-  startGame();
+  startGame(false);
 }
-
+ 
 function showSidebar() {
   
   const html = HtmlService.createHtmlOutputFromFile('Sidebar')
@@ -237,7 +293,7 @@ function showSidebar() {
   
   SpreadsheetApp.getUi().showSidebar(html);
 }
-
+ 
 function paintPiece(piece,row,col,color){
   
   const sheet = SpreadsheetApp.getActiveSheet();
@@ -246,7 +302,7 @@ function paintPiece(piece,row,col,color){
     if (cell)sheet.getRange(row+i+1,col+j+1).setBackground(color);
   }));
 }
-
+ 
 function waiting(msec) {
  
   SpreadsheetApp.flush();
