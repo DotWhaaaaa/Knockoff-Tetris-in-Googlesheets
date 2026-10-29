@@ -29,20 +29,26 @@
           }
         }
       }
-    document.addEventListener('keyup',function(event){
-      if (event.keyCode == 37) {
+     document.addEventListener('keydown',function(event){
+      window.addEventListener('load', function(){ window.focus(); });
+      document.addEventListener('mouseover', function(){ window.focus(); });
+      if (event.key === 'ArrowLeft') {
         sendMove('left');
-      } else if (event.keyCode == 39){
+      } else if (event.key === 'ArrowRight'){
         sendMove('right');
-      } else if (event.keyCode == 40){
+      } else if (event.key === 'ArrowDown'){
         sendMove('down');
-      } else if (event.keycodde == 38){
+      } else if (event.key === 'ArrowUp'){
         sendMove('rotate');
+      } else {
+        return;
       }
+      event.preventDefault();
     });
     </script>
   </head>
   <body>
+    
     <div class = "details">
       <span id="score">Score: 0</span>
     </div>
@@ -54,6 +60,10 @@
         <button onclick="sendMove('right')">Move Right</button>
       </div>
       <button onclick="restartGame()">Restart Game </button>
+    </div>
+    <div class = "gif">
+      <img src = "https://media1.tenor.com/m/Ei_nR5E1ExgAAAAd/gold-ship-uma-musume.gif"alt = "gif 1">
+      <img src = "https://media.tenor.com/-naTKto24mIAAAAi/still-in-love-uma-musume.gif"alt = "gif 2">
     </div>
     <script>
       let lastScore = 0;
@@ -76,6 +86,9 @@
       },1000);
     </script>
     <style>
+      html, body{
+        min-height:100%;
+      }
       .details,
       .controls{
         display:flex;
@@ -84,8 +97,8 @@
       }
       #score{
         align-self:center;
-        margin-bottom: 100px;
-        margin-top: 100px;
+        margin-bottom: 30px;
+        margin-top: 30px;
         font-size: 30px;
         font-family: sans-serif;
         font-weight: bold;
@@ -113,7 +126,17 @@
         font-size: 12px;
         margin-top: 50px;
       }
+      .gif{
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        gap:15px;
+        margin-top:20px;
+      }
+      .gif img{
+        max-width:250px;
+        height:auto;
+      }
     </style>
   </body>
 </html>
-
