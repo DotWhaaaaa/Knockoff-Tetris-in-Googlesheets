@@ -11,4 +11,4 @@ HOW TO PLAY THE GAME!!!
 
 <img width="1919" height="995" alt="image" src="https://github.com/user-attachments/assets/527e91f6-a9cc-4052-b86e-cb3292c78966" />
 
-2. 
+2. Copy and paste KFTETRIS BRAINCODE into Code.gs and rename it BrainCode. 
