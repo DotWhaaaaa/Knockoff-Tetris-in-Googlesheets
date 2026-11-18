@@ -29,13 +29,13 @@ const COLS = 10;
 const CELL_SIZE = 30;
  
 const PIECES = [
-  [[1,1,1,1]], //straight
-  [[2,2],[2,2]],//box
-  [[0,3,0],[3,3,3]],//T shaped
-  [[4,0,0],[4,4,4]],//L shaped
-  [[0,0,5],[5,5,5]],//j shaped
-  [[6,6,0],[0,6,6]],//S shaped
-  [[0,7,7],[7,7,0]],//z shaped
+  [[1,1,1,1]],
+  [[2,2],[2,2]],
+  [[0,3,0],[3,3,3]],
+  [[4,0,0],[4,4,4]],
+  [[0,0,5],[5,5,5]],
+  [[6,6,0],[0,6,6]],
+  [[0,7,7],[7,7,0]],
 ];
  
 const MOVES = {
@@ -65,6 +65,12 @@ let lastDrop = 0;
  
 let lastBg = 0;
  
+let sheet = null;
+ 
+let shown = null;
+ 
+let restartRequested = false;
+ 
 function startGame(openSidebar) {
   
   finished = false;
@@ -72,13 +78,14 @@ function startGame(openSidebar) {
  
   initializeBoard();
   resetValues();
+  restartRequested = false;
   if (openSidebar !== false) showSidebar();
   spawnPiece();
  
   lastDrop = Date.now();
   lastBg = Date.now();
  
-  while (!finished && props.getProperty('restart') !== 'true'){
+  while (!finished && !restartRequested){
     const start = Date.now();
     gameTick();
     const remaining = TICK-(Date.now()-start);
@@ -90,8 +97,9 @@ function startGame(openSidebar) {
 function initializeBoard() {
   
   board = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+  shown = Array.from({ length: ROWS }, () => Array(COLS).fill(BG_COLOR));
  
-  const sheet = SpreadsheetApp.getActiveSheet();
+  sheet = SpreadsheetApp.getActiveSheet();
   sheet.getRange(1,1,ROWS,COLS).setBackground(BG_COLOR).clearContent();
   sheet.setColumnWidths(1,COLS,CELL_SIZE);
   sheet.setRowHeights(1,ROWS,CELL_SIZE);
@@ -113,17 +121,38 @@ function spawnPiece() {
     finished = true;
     return;
   }
-  drawPiece(currentPiece, pieceRow, pieceCol);
+  render();
 }
  
-function drawPiece(piece, row, col) {
-  
-  paintPiece(piece, row, col, COLORS[currentPieceIndex + 1]);
-}
+function render() {
+  const colors = board.map(row => row.map(v => (v > 0 ? COLORS[v] : BG_COLOR)));
  
-function clearPiece(piece, row, col) {
-  
-  paintPiece(piece, row, col, BG_COLOR);
+  if (!finished && currentPiece) {
+    currentPiece.forEach((r, i) => r.forEach((cell, j) => {
+      if (cell) colors[pieceRow + i][pieceCol + j] = COLORS[currentPieceIndex + 1];
+    }));
+  }
+ 
+  let r0 = ROWS, r1 = -1, c0 = COLS, c1 = -1;
+ 
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (colors[r][c] !== shown[r][c]) {
+        if (r < r0) r0 = r;
+        if (r > r1) r1 = r;
+        if (c < c0) c0 = c;
+        if (c > c1) c1 = c;
+      }
+    }
+  }
+ 
+  if (r1 < 0) return;
+ 
+  const part = colors.slice(r0, r1 + 1).map(row => row.slice(c0, c1 + 1));
+ 
+  sheet.getRange(r0 + 1, c0 + 1, r1 - r0 + 1, c1 - c0 + 1).setBackgrounds(part);
+ 
+  shown = colors;
 }
  
 function isValidMove(piece, row, col) {
@@ -140,12 +169,18 @@ function isValidMove(piece, row, col) {
  
 function takeMoves() {
  
+  const all = props.getProperties();
+  restartRequested = all.restart === 'true';
+ 
+  const peek = JSON.parse(all.moveQueue || '[]');
+  if (!peek.length) return peek;
+ 
   const lock = LockService.getScriptLock();
   lock.waitLock(1000);
  
   try {
     const queue = JSON.parse(props.getProperty('moveQueue')||'[]');
-    if (queue.length) props.setProperty('moveQueue','[]');
+    props.setProperty('moveQueue','[]');
     return queue;
   } finally {
     lock.releaseLock();
@@ -164,11 +199,7 @@ function gameTick() {
     lastBg = Date.now();
     BGINDEX = (BGINDEX+1)% BG_PALLETTE.length;
     BG_COLOR = BG_PALLETTE[BGINDEX];
- 
-    drawBoard();
   }
- 
-  clearPiece(currentPiece, pieceRow, pieceCol);
  
   queue.forEach(move => {
     
@@ -190,13 +221,13 @@ function gameTick() {
     } else {
       lockPiece();
       clearLines();
-      drawBoard();
       spawnPiece();
+      render();
       return;
     }
   }
  
-  drawPiece(currentPiece, pieceRow, pieceCol);
+  render();
  
 }
  
@@ -227,13 +258,6 @@ function clearLines() {
     score+=cleared*100;
     props.setProperty('score',String(score)); 
   }
-}
- 
-function drawBoard() {
-  
-  const colors = board.map(row=>row.map(v=>(v>0? COLORS[v]:BG_COLOR)));
-  
-  SpreadsheetApp.getActiveSheet().getRange(1,1,ROWS,COLS).setBackgrounds(colors);
 }
  
 function handleMove(direction) {
@@ -292,15 +316,6 @@ function showSidebar() {
     .setWidth(300);
   
   SpreadsheetApp.getUi().showSidebar(html);
-}
- 
-function paintPiece(piece,row,col,color){
-  
-  const sheet = SpreadsheetApp.getActiveSheet();
-  
-  piece.forEach((r,i)=>r.forEach((cell,j)=>{
-    if (cell)sheet.getRange(row+i+1,col+j+1).setBackground(color);
-  }));
 }
  
 function waiting(msec) {
