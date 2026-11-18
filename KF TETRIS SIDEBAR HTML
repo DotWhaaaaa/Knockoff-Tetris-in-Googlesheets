@@ -9,42 +9,36 @@
 
       let restarting  = false;
       function restartGame() {
-        if(!restarting) {
-          restarting = true;
-          google.script.run.restartGame();
-        }
-        let restarting = false;
-        function restartGame(){
-          if(!restarting){
-            restarting = true;
-            google.scripts.run.restartGame();
+        if (restarting) return;
+        restarting = true;
+        google.script.run.restartGame();
 
-            lastScore = 0;
-            scoreElement.innerHTML = "Score:0";
-            scoreElement.classList.remove("increased");
+        lastScore = 0;
+        scoreElement.innerHTML = "Score: 0";
+        scoreElement.classList.remove("increased");
 
-              setTimeout(function(){
-                restart = false;
-              },3000);
-          }
-        }
+        setTimeout(function(){
+          restarting = false;
+        }, 3000);
       }
-     document.addEventListener('keydown',function(event){
+
       window.addEventListener('load', function(){ window.focus(); });
       document.addEventListener('mouseover', function(){ window.focus(); });
-      if (event.key === 'ArrowLeft') {
-        sendMove('left');
-      } else if (event.key === 'ArrowRight'){
-        sendMove('right');
-      } else if (event.key === 'ArrowDown'){
-        sendMove('down');
-      } else if (event.key === 'ArrowUp'){
-        sendMove('rotate');
-      } else {
-        return;
-      }
-      event.preventDefault();
-    });
+
+      document.addEventListener('keydown',function(event){
+        if (event.key === 'ArrowLeft') {
+          sendMove('left');
+        } else if (event.key === 'ArrowRight'){
+          sendMove('right');
+        } else if (event.key === 'ArrowDown'){
+          sendMove('down');
+        } else if (event.key === 'ArrowUp'){
+          sendMove('rotate');
+        } else {
+          return;
+        }
+        event.preventDefault();
+      });
     </script>
   </head>
   <body>
@@ -83,7 +77,7 @@
             lastScore=score;
           }
         }).getScore();
-      },1000);
+      },3000);
     </script>
     <style>
       html, body{
@@ -138,5 +132,7 @@
         height:auto;
       }
     </style>
+  </body>
+</html>
   </body>
 </html>
