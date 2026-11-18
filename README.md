@@ -24,6 +24,7 @@ HOW TO PLAY THE GAME!!!
 5. Go to the Google Sheets page and refresh, then click on Tetris, then click Start Game.
 <img width="1917" height="1086" alt="image" src="https://github.com/user-attachments/assets/b8e2caba-bc6e-4daa-94fa-2fe3e40459a7" />
 6. Authorize the code to play!
+<img width="1917" height="1045" alt="Screenshot 2026-11-17 223849" src="https://github.com/user-attachments/assets/55531d5e-a5f5-4615-a6f9-9ed203ce1ba2" />
 
 Warning: the game does lag due to it being in Google Sheets.
 
