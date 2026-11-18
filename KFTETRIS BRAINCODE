@@ -176,7 +176,7 @@ function takeMoves() {
   if (!peek.length) return peek;
  
   const lock = LockService.getScriptLock();
-  lock.waitLock(1000);
+  if (!lock.tryLock(3000)) return [];
  
   try {
     const queue = JSON.parse(props.getProperty('moveQueue')||'[]');
@@ -263,7 +263,7 @@ function clearLines() {
 function handleMove(direction) {
  
   const lock = LockService.getScriptLock();
-  lock.waitLock(1000);
+  if (!lock.tryLock(10000)) return;
  
   try {
     const queue = JSON.parse(props.getProperty('moveQueue') || '[]');
